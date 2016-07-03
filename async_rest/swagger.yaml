@@ -1,0 +1,61 @@
+swagger: '2.0'
+
+info:
+  version: "0.0.1"
+  title: "AsyncTree"
+
+paths:
+  /new:
+    post:
+      description: |
+        Insert `subtree` with specified text.
+      parameters:
+        - name: parent_id
+          in: query
+          description: objectid of parent element
+          required: false
+          type: string
+          format: string
+        - name: text
+          in: query
+          description: text inserted into object
+          required: false
+          type: string
+          format: string
+      responses:
+        200:
+          description: Successful insert
+      produces:
+        - application/json
+  /sub/{id}:
+    get:
+      description: |
+        Return `subtree` with full path to root element
+      parameters:
+        - name: id
+          in: path
+          description: objectid of root element
+          required: true
+          type: string
+          format: string
+      responses:
+        200:
+          description: return subtree with full path int header
+      produces:
+        - application/json
+  /search/{text}:
+    get:
+      description: |
+        Perform full text search on tree
+      parameters:
+        - name: text
+          in: path
+          description: text search string
+          required: true
+          type: string
+          format: string
+      responses:
+        200:
+          description: Sussesful search
+      produces:
+        - application/json

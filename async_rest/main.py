@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 
-from urllib.parse import parse_qs
-from os.path import join as pjoin
 from aiohttp import web
 import motor.motor_asyncio
 from bson import json_util, ObjectId
@@ -12,39 +10,35 @@ async def substract(request):
     db = request.app["db"]
     elid = request.match_info.get("id")
     if ObjectId.is_valid(elid):
-        el = await db.tree.find_one({"_id": ObjectId(elid)})
-        if not el:
-            return web.json_response(status=404)
-        else:
-            el["parent"] = None
-            return web.json_response(el, dumps=json_util.dumps)
+        els = []
+        async for el in db.tree.find(
+            {"$or": [{"ancestors": ObjectId(elid)}, {"_id": ObjectId(elid)}]}):
+            els.append(el)
+        return web.json_response(els, dumps=json_util.dumps)
     return web.json_response(status=404)
 
 
 async def insert(request):
     """ return tree substract where root is element id """
     db = request.app["db"]
-    query = parse_qs(request.query_string, keep_blank_values=True)
-    parent_id = query.get("parent_id", [""])[0]
-    text = query.get("text", [])
-    abspath = "/"
+    parent_id = request.GET.get("parent_id")
+    text = request.GET.get("text", "")
+    ancestors = []
     if ObjectId.is_valid(parent_id):
         parent = await db.tree.find_one({"_id": ObjectId(parent_id)})
         if parent:
             parent_id = parent["_id"]
-            abspath = pjoin("/", str(parent["abspath"]), str(parent_id))
+            ancestors = parent["ancestors"]
+            ancestors.append(parent_id)
         else:
             parent_id = None
     else:
         parent_id = None
     el = await db.tree.insert({
-        "text": " ".join(text),
+        "text": text,
         "parent": parent_id,
-        "abspath": abspath,
-        "ancestors": []
+        "ancestors": ancestors
     })
-    if parent_id:
-        await db.tree.update({"_id": parent_id}, {"$push": {"ancestors": el}})
     return web.json_response(el, dumps=json_util.dumps)
 
 
@@ -54,6 +48,7 @@ async def search(request):
     db = request.app["db"]
     els = []
     async for el in db.tree.find({"$text": {"$search": search_query}}):
+        el["abspath"] = "/" + "/".join([str(e) for e in el["ancestors"]] + [str(el["_id"])])
         els.append(el)
     return web.json_response(els, dumps=json_util.dumps)
 
@@ -65,7 +60,7 @@ def init_app():
     app["db"] = db.test
     app.router.add_route("GET", "/sub/{id}", substract)
     app.router.add_route("GET", "/search/{text}", search)
-    app.router.add_route("POST", "/new/", insert)
+    app.router.add_route("POST", "/new", insert)
     return app
 
 
